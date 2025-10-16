@@ -10,7 +10,9 @@ import openai
 # Load environment variables
 load_dotenv()
 
-app = Flask(__name__)
+print("=" * 50)
+print("STARTING APPLICATION")
+print("=" * 50)
 
 # Configuration
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
@@ -18,9 +20,26 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 SECRET_KEY = os.getenv('SECRET_KEY')
 GITHUB_USERNAME = os.getenv('GITHUB_USERNAME')
 
-# Initialize GitHub client
-g = Github(GITHUB_TOKEN)
+print(f"GITHUB_TOKEN exists: {bool(GITHUB_TOKEN)}")
+print(f"OPENAI_API_KEY exists: {bool(OPENAI_API_KEY)}")
+print(f"SECRET_KEY exists: {bool(SECRET_KEY)}")
+print(f"GITHUB_USERNAME: {GITHUB_USERNAME}")
+
+# Initialize clients
+print("Initializing GitHub client...")
+try:
+    g = Github(GITHUB_TOKEN)
+    user = g.get_user()
+    print(f"GitHub user authenticated: {user.login}")
+except Exception as e:
+    print(f"GitHub initialization failed: {e}")
+
+print("Setting OpenAI API key...")
 openai.api_key = OPENAI_API_KEY
+
+app = Flask(__name__)
+print("Flask app created")
+print("=" * 50)
 
 
 @app.route('/api-endpoint', methods=['POST'])
