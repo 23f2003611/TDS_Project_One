@@ -30,21 +30,71 @@ def handle_request():
         # Get JSON data
         data = request.get_json()
         
-        print(f"Received request: {data}")  # Add this line
+        if not data:
+            return jsonify({"error": "No JSON data received"}), 400
+        
+        print(f"Received data: {json.dumps(data, indent=2)}")
         
         # Validate secret
-        if data.get('secret') != SECRET_KEY:
-            print(f"Invalid secret. Expected: {SECRET_KEY}, Got: {data.get('secret')}")  # Add this
+        secret_from_request = data.get('secret')
+        if secret_from_request != SECRET_KEY:
+            print(f"Secret mismatch! Expected: '{SECRET_KEY}', Got: '{secret_from_request}'")
             return jsonify({"error": "Invalid secret"}), 403
         
-        # ... rest of the code
+        print("Secret validated successfully")
+        
+        # Extract task details
+        email = data.get('email')
+        task = data.get('task')
+        round_num = data.get('round')
+        nonce = data.get('nonce')
+        brief = data.get('brief')
+        checks = data.get('checks', [])
+        evaluation_url = data.get('evaluation_url')
+        attachments = data.get('attachments', [])
+        
+        print(f"Processing task: {task}, Round: {round_num}")
+        print(f"Brief: {brief}")
+        
+        # Generate the app code using LLM
+        print("Generating app code...")
+        app_code = generate_app_code(brief, attachments, checks)
+        print("App code generated successfully")
+        
+        # Create unique repo name
+        repo_name = f"{task}"
+        
+        # Create GitHub repo and deploy
+        print(f"Creating repo: {repo_name}")
+        repo_url, commit_sha, pages_url = create_and_deploy_repo(
+            repo_name, app_code, brief, round_num
+        )
+        print(f"Repo created: {repo_url}")
+        
+        # Report back to evaluation URL
+        print(f"Reporting to: {evaluation_url}")
+        report_success = report_to_evaluation(
+            evaluation_url, email, task, round_num, nonce,
+            repo_url, commit_sha, pages_url
+        )
+        
+        return jsonify({
+            "status": "success",
+            "repo_url": repo_url,
+            "pages_url": pages_url,
+            "reported": report_success
+        }), 200
         
     except Exception as e:
         import traceback
-        print(f"ERROR: {str(e)}")  # Add this
-        print(traceback.format_exc())  # Add this - shows full error
-        return jsonify({"error": str(e)}), 500
-
+        error_trace = traceback.format_exc()
+        print(f"ERROR occurred: {str(e)}")
+        print(error_trace)
+        return jsonify({
+            "error": str(e),
+            "traceback": error_trace
+        }), 500
+    
 def generate_app_code(brief, attachments, checks):
     """Use OpenAI to generate app code based on brief"""
     
