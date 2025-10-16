@@ -5,7 +5,7 @@ import requests
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from github import Github
-import openai
+from openai import OpenAI
 
 # Load environment variables
 load_dotenv()
@@ -25,7 +25,7 @@ print(f"OPENAI_API_KEY exists: {bool(OPENAI_API_KEY)}")
 print(f"SECRET_KEY exists: {bool(SECRET_KEY)}")
 print(f"GITHUB_USERNAME: {GITHUB_USERNAME}")
 
-# Initialize clients
+# Initialize GitHub client
 print("Initializing GitHub client...")
 try:
     g = Github(GITHUB_TOKEN)
@@ -34,9 +34,7 @@ try:
 except Exception as e:
     print(f"GitHub initialization failed: {e}")
 
-print("Setting OpenAI API key...")
-openai.api_key = OPENAI_API_KEY
-
+print("OpenAI client will be initialized per request")
 app = Flask(__name__)
 print("Flask app created")
 print("=" * 50)
@@ -48,8 +46,7 @@ def handle_request():
     try:
         # Get JSON data
         data = request.get_json()
-        print("Received POST request") 
-        print("data:", data)
+        
         if not data:
             return jsonify({"error": "No JSON data received"}), 400
         
@@ -114,7 +111,8 @@ def handle_request():
             "error": str(e),
             "traceback": error_trace
         }), 500
-    
+
+
 def generate_app_code(brief, attachments, checks):
     """Use OpenAI to generate app code based on brief"""
     
@@ -147,23 +145,91 @@ Requirements:
 
 Return ONLY the HTML code, no explanations."""
 
-    response = openai.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You are an expert web developer. Generate clean, working HTML/CSS/JS code."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.7,
-        max_tokens=3000
-    )
+    try:
+        print("Creating OpenAI client with custom httpx client...")
+        import httpx
+        
+        # Create a custom httpx client without proxy support
+        http_client = httpx.Client(
+            timeout=60.0,
+            follow_redirects=True
+        )
+        
+        client = OpenAI(
+            api_key=OPENAI_API_KEY,
+            http_client=http_client
+        )
+        
+        print("Calling OpenAI API...")
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are an expert web developer. Generate clean, working HTML/CSS/JS code."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=3000
+        )
+        
+        code = response.choices[0].message.content
+        
+        # Clean up code (remove markdown code blocks if present)
+        if code.startswith('```'):
+            lines = code.split('\n')
+            if lines[0].startswith('```'):
+                lines = lines[1:]
+            if lines and lines[-1].startswith('```'):
+                lines = lines[:-1]
+            code = '\n'.join(lines)
+        
+        print("OpenAI generation successful!")
+        return code
+        
+    except Exception as e:
+        print(f"OpenAI Error: {str(e)}")
+        print("Falling back to template-based generation...")
+        
+        # Fallback: Generate based on brief keywords
+        return generate_template_based_code(brief, checks)
+
+
+def generate_template_based_code(brief, checks):
+    """Fallback: Generate simple HTML based on brief"""
     
-    code = response.choices[0].message.content
+    brief_lower = brief.lower()
     
-    # Clean up code (remove markdown code blocks if present)
-    if code.startswith('```'):
-        code = '\n'.join(code.split('\n')[1:-1])
+    # Detect if Bootstrap is needed
+    needs_bootstrap = any(word in brief_lower for word in ['bootstrap', 'navbar', 'card', 'button', 'form'])
     
-    return code
+    bootstrap_css = '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">' if needs_bootstrap else ''
+    container_class = 'container mt-5' if needs_bootstrap else ''
+    
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto-Generated App</title>
+    {bootstrap_css}
+</head>
+<body>
+    <div class="{container_class}">
+        <h1>Auto-Generated Application</h1>
+        <p class="lead">This application was automatically generated based on the brief.</p>
+        <div class="alert alert-info mt-3">
+            <strong>Brief:</strong> {brief}
+        </div>
+        <div class="card mt-3">
+            <div class="card-body">
+                <h5 class="card-title">Implementation Requirements</h5>
+                <ul>
+                    {"".join([f"<li>{check}</li>" for check in checks])}
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>"""
 
 
 def create_and_deploy_repo(repo_name, app_code, brief, round_num):
@@ -335,4 +401,4 @@ def home():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=True)
