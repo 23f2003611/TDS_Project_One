@@ -48,7 +48,8 @@ def handle_request():
     try:
         # Get JSON data
         data = request.get_json()
-        
+        print("Received POST request") 
+        print("data:", data)
         if not data:
             return jsonify({"error": "No JSON data received"}), 400
         
