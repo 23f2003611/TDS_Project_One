@@ -30,51 +30,20 @@ def handle_request():
         # Get JSON data
         data = request.get_json()
         
+        print(f"Received request: {data}")  # Add this line
+        
         # Validate secret
         if data.get('secret') != SECRET_KEY:
+            print(f"Invalid secret. Expected: {SECRET_KEY}, Got: {data.get('secret')}")  # Add this
             return jsonify({"error": "Invalid secret"}), 403
         
-        # Extract task details
-        email = data.get('email')
-        task = data.get('task')
-        round_num = data.get('round')
-        nonce = data.get('nonce')
-        brief = data.get('brief')
-        checks = data.get('checks', [])
-        evaluation_url = data.get('evaluation_url')
-        attachments = data.get('attachments', [])
-        
-        print(f"Received task: {task}, Round: {round_num}")
-        print(f"Brief: {brief}")
-        
-        # Generate the app code using LLM
-        app_code = generate_app_code(brief, attachments, checks)
-        
-        # Create unique repo name
-        repo_name = f"{task}"
-        
-        # Create GitHub repo and deploy
-        repo_url, commit_sha, pages_url = create_and_deploy_repo(
-            repo_name, app_code, brief, round_num
-        )
-        
-        # Report back to evaluation URL
-        report_success = report_to_evaluation(
-            evaluation_url, email, task, round_num, nonce,
-            repo_url, commit_sha, pages_url
-        )
-        
-        return jsonify({
-            "status": "success",
-            "repo_url": repo_url,
-            "pages_url": pages_url,
-            "reported": report_success
-        }), 200
+        # ... rest of the code
         
     except Exception as e:
-        print(f"Error: {str(e)}")
+        import traceback
+        print(f"ERROR: {str(e)}")  # Add this
+        print(traceback.format_exc())  # Add this - shows full error
         return jsonify({"error": str(e)}), 500
-
 
 def generate_app_code(brief, attachments, checks):
     """Use OpenAI to generate app code based on brief"""
